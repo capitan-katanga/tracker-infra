@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: 'pgvector/pgvector:pg17'
+    labels:
+      org.springframework.boot.service-connection: postgres
+    environment:
+      POSTGRES_DB: ExpenseTracker
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}   # lo usa init/01-keycloak.sh
+    ports:
+      - '5332:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro       # solo corre con el volumen vacío
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d ExpenseTracker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:

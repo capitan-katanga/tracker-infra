@@ -1,0 +1,35 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    command: ["start-dev", "--import-realm"]
+    labels:
+      # spring-boot-docker-compose no espera a Keycloak ni le crea service connection
+      org.springframework.boot.ignore: "true"
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_HOSTNAME: http://localhost:8180      # fija el issuer (ver README)
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Placeholders que resuelve el import del realm
+      API_GATEWAY_CLIENT_SECRET: ${API_GATEWAY_CLIENT_SECRET}
+      EXPENSE_MANAGER_CLIENT_SECRET: ${EXPENSE_MANAGER_CLIENT_SECRET}
+      KEYCLOAK_DEMO_USER_PASSWORD: ${KEYCLOAK_DEMO_USER_PASSWORD}
+    volumes:
+      - ./realms:/opt/keycloak/data/import:ro
+    ports:
+      - '8180:8080'                           # el 8080 es de expense-manager
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      # La imagen no trae curl: health de management (9000) por /dev/tcp
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s

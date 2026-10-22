@@ -1,0 +1,12 @@
+# Infraestructura compartida de desarrollo del expense tracker.
+# Cada componente vive en su carpeta con su propio compose.yaml; acá solo se incluyen.
+# Los paths relativos de cada fragmento resuelven contra su carpeta.
+name: tracker-infra
+
+include:
+  - path: postgres/compose.yaml
+    env_file: .env
+  - path: observability/compose.yaml
+    env_file: .env
+  - path: keycloak/compose.yaml
+    env_file: .env
