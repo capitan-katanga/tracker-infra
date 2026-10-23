@@ -2,12 +2,16 @@ services:
   postgres:
     image: 'pgvector/pgvector:pg17'
     labels:
-      org.springframework.boot.service-connection: postgres
+      # sin service connection: cada servicio usa su rol (spring.datasource.*), ver README
+      org.springframework.boot.ignore: "true"
     environment:
       POSTGRES_DB: ExpenseTracker
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}   # lo usa init/01-keycloak.sh
+      # lo usa init/02-services.sh
+      TRANSACTIONAL_DB_PASSWORD: ${TRANSACTIONAL_DB_PASSWORD:?set TRANSACTIONAL_DB_PASSWORD in .env}
+      RECEIPT_PARSER_DB_PASSWORD: ${RECEIPT_PARSER_DB_PASSWORD:?set RECEIPT_PARSER_DB_PASSWORD in .env}
     ports:
       - '5332:5432'
     volumes:
