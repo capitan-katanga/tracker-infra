@@ -1,5 +1,5 @@
 #!/bin/bash
-# Rol y schema propios por servicio dentro de ExpenseTracker (ADR-009).
+# Rol y schema propios por servicio dentro de ExpenseTracker (ADR-009) y su CONNECTION LIMIT (ADR-013).
 # Flyway de cada servicio corre con su rol y solo crea objetos dentro de su schema.
 # Idempotente: se puede re-ejecutar sobre un volumen existente (no cambia passwords de roles ya creados).
 set -euo pipefail
@@ -33,4 +33,9 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
 	CREATE SCHEMA IF NOT EXISTS receipt_parser AUTHORIZATION receipt_parser;
 	GRANT USAGE ON SCHEMA extensions TO receipt_parser;
 	ALTER ROLE receipt_parser IN DATABASE "ExpenseTracker" SET search_path = receipt_parser, extensions;
+
+	-- Presupuesto de conexiones (ADR-013): límite = pool del servicio + 2 (psql o debug con su rol).
+	-- Subir un <ROL>_DB_POOL_SIZE exige subir su límite acá y re-ejecutar el script.
+	ALTER ROLE transactional CONNECTION LIMIT 12;
+	ALTER ROLE receipt_parser CONNECTION LIMIT 7;
 SQL

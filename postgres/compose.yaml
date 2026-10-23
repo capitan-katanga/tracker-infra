@@ -1,6 +1,7 @@
 services:
   postgres:
     image: 'pgvector/pgvector:pg17'
+    command: ["postgres", "-c", "max_connections=100"]   # presupuesto de conexiones (ADR-013), ver README
     labels:
       # sin service connection: cada servicio usa su rol (spring.datasource.*), ver README
       org.springframework.boot.ignore: "true"

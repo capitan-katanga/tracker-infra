@@ -38,10 +38,10 @@ Un componente nuevo (Kafka, Redis, MinIO) suma su carpeta y una línea en `inclu
 Cada servicio tiene su rol y su schema dentro de `ExpenseTracker`. Los crea `postgres/init/02-services.sh`
 como superusuario; el superusuario (`POSTGRES_USER`) no lo usa ningún servicio.
 
-| Rol | Schema (dueño) | Password (`.env`) | `search_path` |
-|---|---|---|---|
-| `transactional` | `transactional` | `TRANSACTIONAL_DB_PASSWORD` | `transactional` |
-| `receipt_parser` | `receipt_parser` | `RECEIPT_PARSER_DB_PASSWORD` | `receipt_parser, extensions` |
+| Rol | Schema (dueño) | Password (`.env`) | `search_path` | `CONNECTION LIMIT` |
+|---|---|---|---|---|
+| `transactional` | `transactional` | `TRANSACTIONAL_DB_PASSWORD` | `transactional` | 12 |
+| `receipt_parser` | `receipt_parser` | `RECEIPT_PARSER_DB_PASSWORD` | `receipt_parser, extensions` | 7 |
 
 - Solo los roles de servicio tienen CONNECT a `ExpenseTracker` (`keycloak` no) y nadie más que el
   superusuario puede crear en `public`, que queda vacío.
@@ -50,6 +50,36 @@ como superusuario; el superusuario (`POSTGRES_USER`) no lo usa ningún servicio.
 - El script es idempotente. Para sumar un servicio sin borrar el volumen, agregar su bloque y
   re-ejecutarlo: `docker compose exec postgres bash /docker-entrypoint-initdb.d/02-services.sh`.
 - No cambia passwords de roles que ya existen; para eso, `ALTER ROLE <rol> PASSWORD '...'`.
+
+## Presupuesto de conexiones (ADR-013)
+
+`max_connections` está fijo en 100 en el `command` de `postgres/compose.yaml` y se reparte así:
+
+| Consumidor | Pool | `CONNECTION LIMIT` del rol | Env var del pool |
+|---|---|---|---|
+| Keycloak | 10 (inicial = mín = máx) | sin límite (lo acota su pool) | `KC_DB_POOL_*`, fijas en `keycloak/compose.yaml` |
+| transactional | 10 | 12 | `TRANSACTIONAL_DB_POOL_SIZE` |
+| receipt-parser | 5 | 7 | `RECEIPT_PARSER_DB_POOL_SIZE` |
+| expense-manager (futuro) | 10 | 12 | `EXPENSE_MANAGER_DB_POOL_SIZE` |
+| telegram-bot (futuro) | 10 | 12 | `TELEGRAM_BOT_DB_POOL_SIZE` |
+| Resto: admin, IDE, psql, Grafana | 55 (incluye las 3 de `superuser_reserved_connections`) | — | — |
+
+- Los pools de los servicios son fijos (mín = máx). Sus env vars, y las `DB_POOL_*` de timeouts comunes a
+  todos, son opcionales y las lee cada servicio, no este compose: los defaults están en `.env.example`.
+- **Regla: `CONNECTION LIMIT` = pool + 2** (margen para un psql o debug con el rol del servicio). El límite
+  va fijo en `postgres/init/02-services.sh` porque Postgres no ve el entorno de los servicios: subir un
+  `<ROL>_DB_POOL_SIZE` exige subir su límite ahí y re-ejecutar el script.
+
+Para aplicarlo sobre un volumen existente, sin borrarlo:
+
+```bash
+docker compose up -d   # recrea postgres (command) y keycloak (environment); el volumen se conserva
+docker compose exec postgres bash /docker-entrypoint-initdb.d/02-services.sh
+docker compose exec postgres psql -U admin -d ExpenseTracker -c 'show max_connections' \
+  -c "select rolname, rolconnlimit from pg_roles where rolname in ('transactional', 'receipt_parser', 'keycloak')"
+```
+
+`-U` es el `POSTGRES_USER` del `.env`. `keycloak` queda en `-1` (sin límite).
 
 ## Realm `expense-tracker`
 
@@ -100,5 +130,9 @@ curl -s -u expense-manager:$EXPENSE_MANAGER_CLIENT_SECRET -d grant_type=client_c
   antes de crear el contenedor.
 - **`psql` por socket local entra por `trust`** dentro del contenedor. Para probar passwords hay que usar
   `-h postgres` (red de Docker, `scram-sha-256`).
+- **`too many connections for role "<rol>"`** (SQLState `53300`): el rol ya usa todo su `CONNECTION LIMIT`
+  y Hikari no llena el pool. Casi siempre es una segunda instancia del servicio, otra run config del IDE o
+  un test que levantó un segundo contexto de Spring, cada uno con su pool fijo. Si de verdad hace falta más
+  pool, subir el límite en `02-services.sh` y re-ejecutarlo.
 - **La imagen de Keycloak no trae curl.** El healthcheck consulta `/health/ready` del puerto de
   management (9000) por `/dev/tcp`.
