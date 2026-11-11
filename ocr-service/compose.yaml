@@ -1,0 +1,20 @@
+# Profile `ocr`: no arranca con `docker compose up`. La imagen se construye antes en repos/ocr-service.
+services:
+  ocr-service:
+    image: 'ocr-service:local'
+    pull_policy: never
+    profiles: [ocr]
+    ports:
+      - '127.0.0.1:8084:8084'
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: 'http://grafana-lgtm:4318'
+    mem_limit: 3g
+    cpus: 4 # = OCR_CPU_THREADS
+    depends_on: [grafana-lgtm]
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'python', '-m', 'ocr_service.healthcheck']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 120s
