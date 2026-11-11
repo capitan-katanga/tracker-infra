@@ -12,6 +12,10 @@ docker compose up -d keycloak # una parte (trae postgres por depends_on)
 docker compose ps             # los 3 deben quedar healthy
 ```
 
+`ocr-service` está en el profile `ocr` y no arranca con lo anterior. Construir antes la imagen en
+`repos/ocr-service` (`docker build -t ocr-service:local .`) y levantarlo con
+`docker compose --profile ocr up -d` (trae `grafana-lgtm`; healthy tras unos 2 min por la carga de modelos).
+
 Los servicios Spring con `spring-boot-docker-compose` (hoy `crud-tracker`) lo levantan solos con
 `spring.docker.compose.file: ../tracker-infra/compose.yaml`, así que este repo se clona al lado de ellos.
 
@@ -27,6 +31,7 @@ Un componente nuevo (Kafka, Redis, MinIO) suma su carpeta y una línea en `inclu
 | `postgres/` | `postgres` (pgvector/pgvector:pg17, DB `ExpenseTracker` (schemas `transactional`, `receipt_parser`, `extensions`) + DB `keycloak`) | 5332 |
 | `observability/` | `grafana-lgtm` (grafana/otel-lgtm) | 3001 (Grafana), 4317 (OTLP gRPC), 4318 (OTLP HTTP) |
 | `keycloak/` | `keycloak` (26.8.1, `start-dev`) | 8180 (admin en `/admin`, usuario `admin`) |
+| `ocr-service/` | `ocr-service` (imagen `ocr-service:local`, profile `ocr`, `mem_limit` 3g, `cpus` 4) | 127.0.0.1:8084 |
 
 ## Usuarios por servicio (ADR-009)
 
